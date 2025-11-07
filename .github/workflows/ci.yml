@@ -19,16 +19,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r src/requirements.txt
 
-      - name: Install SAM CLI
-        run: |
-          python -m pip install --upgrade pipx
-          python -m pipx ensurepath
-          pipx install aws-sam-cli
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          ~/.local/bin/sam --version
-
       - name: Run unit tests
         run: pytest -q
+
+      # Офіційний екшен від AWS для встановлення SAM CLI
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Show SAM version
+        run: sam --version
 
       - name: Validate SAM template
         run: sam validate
