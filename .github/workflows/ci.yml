@@ -9,12 +9,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install deps
-        run: pip install -r src/requirements.txt
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/requirements.txt
+
+      - name: Install SAM CLI
+        run: |
+          python -m pip install --upgrade pipx
+          python -m pipx ensurepath
+          pipx install aws-sam-cli
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          ~/.local/bin/sam --version
+
       - name: Run unit tests
         run: pytest -q
+
       - name: Validate SAM template
         run: sam validate
