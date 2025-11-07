@@ -1,0 +1,9 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "hospital-backend-sam"
+resolve_s3 = true
+region = "eu-central-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "DashboardOrigin=http://localhost:8000 DashboardPublicRead=true ProjectName=hospital-backend-sam EnvironmentName=dev"

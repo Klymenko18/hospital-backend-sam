@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Hospital Admin Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; }
+    .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; }
+    .stack { display: grid; gap: 8px; }
+    input, button { padding: 8px 10px; border-radius: 8px; border: 1px solid #d1d5db; }
+    canvas { max-width: 100%; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>Admin Dashboard</h1>
+  <div class="card stack">
+    <label>API Base URL</label>
+    <input id="apiUrl" placeholder="https://xxxxxx.execute-api.eu-central-1.amazonaws.com"/>
+    <label>JWT (Admin)</label>
+    <input id="jwt" placeholder="Paste Admin JWT here"/>
+    <div class="grid-2">
+      <div><label>Min Age</label><input id="minAge" type="number" placeholder="e.g. 18"/></div>
+      <div><label>Max Age</label><input id="maxAge" type="number" placeholder="e.g. 65"/></div>
+    </div>
+    <button id="reload">Load Metrics</button>
+  </div>
+
+  <div class="row" style="margin-top:16px">
+    <div class="card"><h3>Total Patients</h3><div id="totalPatients">–</div></div>
+    <div class="card"><h3>Average BMI</h3><div id="avgBmi">–</div></div>
+    <div class="card"><h3>Average Age</h3><div id="avgAge">–</div></div>
+  </div>
+
+  <div class="row" style="margin-top:16px">
+    <div class="card"><h3>Top Diseases</h3><canvas id="chartDiseases"></canvas></div>
+    <div class="card"><h3>Counts by Sex</h3><canvas id="chartSex"></canvas></div>
+    <div class="card"><h3>Medications</h3><canvas id="chartMeds"></canvas></div>
+  </div>
+
+  <script>
+    let chartDiseases, chartSex, chartMeds;
+
+    function headers(jwt) {
+      return { "Authorization": "Bearer " + jwt };
+    }
+
+    async function fetchJSON(url, jwt) {
+      const r = await fetch(url, { headers: headers(jwt) });
+      if (!r.ok) {
+        const text = await r.text();
+        throw new Error("HTTP " + r.status + " " + text);
+      }
+      return await r.json();
+    }
+
+    function renderKPI(data) {
+      document.getElementById("totalPatients").textContent = String(data.total_patients);
+      document.getElementById("avgBmi").textContent = String(data.avg_bmi);
+      document.getElementById("avgAge").textContent = String(data.avg_age_years);
+    }
+
+    function renderChart(canvasId, type, labels, values) {
+      const ctx = document.getElementById(canvasId).getContext("2d");
+      return new Chart(ctx, { type, data: { labels, datasets: [{ data: values }] }, options: { responsive: true }});
+    }
+
+    function queryString() {
+      const qs = new URLSearchParams();
+      const minAge = document.getElementById("minAge").value.trim();
+      const maxAge = document.getElementById("maxAge").value.trim();
+      if (minAge) qs.set("min_age", minAge);
+      if (maxAge) qs.set("max_age", maxAge);
+      const s = qs.toString();
+      return s ? `?${s}` : "";
+    }
+
+    async function loadAll() {
+      const base = document.getElementById("apiUrl").value.trim();
+      const jwt = document.getElementById("jwt").value.trim();
+      const qs = queryString();
+
+      const overview = await fetchJSON(`${base}/admin/metrics/overview${qs}`, jwt);
+      renderKPI(overview);
+
+      const diseases = await fetchJSON(`${base}/admin/metrics/diseases${qs}`, jwt);
+      const meds = await fetchJSON(`${base}/admin/metrics/medications${qs}`, jwt);
+
+      const dLabels = (overview.top_diseases || []).map(x => x.name);
+      const dValues = (overview.top_diseases || []).map(x => x.count);
+      if (chartDiseases) chartDiseases.destroy();
+      chartDiseases = renderChart("chartDiseases", "bar", dLabels, dValues);
+
+      const sexLabels = Object.keys(overview.counts_by_sex || {});
+      const sexValues = Object.values(overview.counts_by_sex || {});
+      if (chartSex) chartSex.destroy();
+      chartSex = renderChart("chartSex", "pie", sexLabels, sexValues);
+
+      const mLabels = Object.keys(meds.medications || {});
+      const mValues = Object.values(meds.medications || {});
+      if (chartMeds) chartMeds.destroy();
+      chartMeds = renderChart("chartMeds", "bar", mLabels, mValues);
+    }
+
+    document.getElementById("reload").addEventListener("click", () => {
+      loadAll().catch(err => alert(err.message));
+    });
+  </script>
+</body>
+</html>
