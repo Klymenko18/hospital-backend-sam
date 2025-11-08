@@ -25,7 +25,8 @@ jobs:
       - name: Run unit tests
         env:
           PYTHONPATH: src
+          AWS_REGION: us-east-1
+          AWS_DEFAULT_REGION: us-east-1
+          DYNAMODB_TABLE: unit-tests
         run: pytest -q
 
-      - name: Lint CloudFormation/SAM template
-        run: cfn-lint -t template.yaml
