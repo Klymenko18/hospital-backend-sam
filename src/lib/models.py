@@ -1,28 +1,30 @@
 from __future__ import annotations
 
+from typing import Dict, List
 from pydantic import BaseModel, Field
-from typing import List, Dict
 
 
 class PatientRecord(BaseModel):
-    """
-    Serializable patient record.
-    """
+    """Patient document stored in DynamoDB."""
     patient_id: str
     name: str
-    sex: str = Field(pattern="^(M|F|X)$")
+    sex: str
     date_of_birth: str
     bmi: float
-    medications: List[str]
-    diseases: List[str]
+    medications: List[str] = Field(default_factory=list)
+    diseases: List[str] = Field(default_factory=list)
+
+
+class TopItem(BaseModel):
+    """Generic ranked item (e.g., top diseases)."""
+    name: str
+    count: int
 
 
 class MetricsOverview(BaseModel):
-    """
-    Aggregated metrics overview.
-    """
+    """Aggregated metrics for admin dashboard."""
     total_patients: int
     avg_bmi: float
     counts_by_sex: Dict[str, int]
     avg_age_years: float
-    top_diseases: List[Dict[str, int]]
+    top_diseases: List[TopItem] = Field(default_factory=list)
