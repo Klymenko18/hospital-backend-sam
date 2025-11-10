@@ -1,4 +1,4 @@
-=AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Hospital mini-backend (Cognito + HTTP API + Lambda + DynamoDB)
 
@@ -87,6 +87,7 @@ Resources:
   #####################################################
   HealthFunction:
     Type: AWS::Serverless::Function
+    Metadata: { BuildMethod: makefile }
     Properties:
       CodeUri: src/handlers
       Handler: health.handler
@@ -105,6 +106,7 @@ Resources:
   #####################################################
   DashboardFunction:
     Type: AWS::Serverless::Function
+    Metadata: { BuildMethod: makefile }
     Properties:
       CodeUri: src/handlers
       Handler: dashboard.handler
@@ -138,6 +140,7 @@ Resources:
   #####################################################
   AdminMetricsFunction:
     Type: AWS::Serverless::Function
+    Metadata: { BuildMethod: makefile }
     Properties:
       CodeUri: src/handlers
       Handler: admin_metrics.handler
@@ -159,6 +162,7 @@ Resources:
   #####################################################
   MeRecordFunction:
     Type: AWS::Serverless::Function
+    Metadata: { BuildMethod: makefile }
     Properties:
       CodeUri: src/handlers
       Handler: me_record.handler
