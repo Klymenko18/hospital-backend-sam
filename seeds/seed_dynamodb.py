@@ -1,81 +1,72 @@
-from __future__ import annotations
-
+#!/usr/bin/env python3
+"""Seed DynamoDB with patient records derived from Cognito users (excludes admin)."""
 import argparse
-import random
-from datetime import date, timedelta
-from typing import Dict, List
-
+from typing import Dict, Iterable, List
 import boto3
-from faker import Faker
-
-DIAGNOSES = [
-    "Hypertension",
-    "Diabetes",
-    "Asthma",
-    "Migraine",
-    "Anxiety",
-    "Depression",
-    "Allergic rhinitis",
-    "GERD",
-    "Osteoarthritis",
-    "Back pain",
-]
 
 
-def list_patient_subs(cognito, user_pool_id: str) -> List[str]:
-    """Return a list of patient subs from the 'patients' group."""
-    subs: List[str] = []
+def list_all_users(cognito, user_pool_id: str) -> Iterable[Dict]:
     token = None
     while True:
-        resp = cognito.list_users_in_group(
-            UserPoolId=user_pool_id, GroupName="patients", Limit=60, NextToken=token
-        )
+        params = {"UserPoolId": user_pool_id, "Limit": 60}
+        if token:
+            params["PaginationToken"] = token
+        resp = cognito.list_users(**params)
         for u in resp.get("Users", []):
-            sub = next(a["Value"] for a in u["Attributes"] if a["Name"] == "sub")
-            subs.append(sub)
-        token = resp.get("NextToken")
+            yield u
+        token = resp.get("PaginationToken")
         if not token:
             break
-    return subs
 
 
-def make_record(fake: Faker, patient_id: str) -> Dict:
-    """Create a synthetic patient record."""
-    full_name = fake.name()
-    start = date(1960, 1, 1).toordinal()
-    end = date(2010, 12, 31).toordinal()
-    dob = date.fromordinal(random.randint(start, end)).isoformat()
-    last_visit = (date.today() - timedelta(days=random.randint(0, 365))).isoformat()
-    dx = random.sample(DIAGNOSES, k=random.randint(1, 3))
+def get_attr(user: Dict, name: str) -> str:
+    for a in user.get("Attributes", []):
+        if a.get("Name") == name:
+            return a.get("Value", "")
+    return ""
+
+
+def build_patient_item(user: Dict) -> Dict:
     return {
-        "patient_id": patient_id,
-        "full_name": full_name,
-        "dob": dob,
-        "last_visit": last_visit,
-        "diagnoses": dx,
+        "patient_id": get_attr(user, "sub"),
+        "email": get_attr(user, "email"),
+        "status": "active",
     }
 
 
-def main() -> int:
-    """Populate DynamoDB with records for all patient users."""
+def upsert_items(dynamo, table_name: str, items: List[Dict]) -> None:
+    table = dynamo.Table(table_name)
+    with table.batch_writer(overwrite_by_pkeys=("patient_id",)) as batch:
+        for it in items:
+            batch.put_item(Item=it)
+
+
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--region", required=True)
     parser.add_argument("--user-pool-id", required=True)
     parser.add_argument("--table-name", required=True)
+    parser.add_argument("--admin-email", default="admin@example.com")
     args = parser.parse_args()
 
-    cognito = boto3.client("cognito-idp", region_name=args.region)
-    dynamo = boto3.resource("dynamodb", region_name=args.region)
-    table = dynamo.Table(args.table_name)
-    fake = Faker()
+    session = boto3.session.Session(region_name=args.region)
+    cognito = session.client("cognito-idp")
+    dynamo = session.resource("dynamodb")
 
-    subs = list_patient_subs(cognito, args.user_pool_id)
-    for sub in subs:
-        table.put_item(Item=make_record(fake, sub))
+    items: List[Dict] = []
+    for user in list_all_users(cognito, args.user_pool_id):
+        email = get_attr(user, "email") or ""
+        if email.lower() == args.admin_email.lower():
+            continue
+        items.append(build_patient_item(user))
 
-    print(f"Inserted/overwritten {len(subs)} records")
-    return 0
+    if not items:
+        print("No patients discovered in Cognito. Nothing to write.")
+        return
+
+    upsert_items(dynamo, args.table_name, items)
+    print(f"Upserted {len(items)} patients into '{args.table_name}'.")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
