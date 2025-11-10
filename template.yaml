@@ -1,157 +1,168 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Hospital mini-backend (Cognito + HTTP API + Lambda + DynamoDB)
+Description: Hospital Mini-Backend — SAM stack (Cognito + DDB + JWT Authorizer + Admin Dashboard)
+
+Parameters:
+  CognitoDomainPrefix:
+    Type: String
+    Description: Unique prefix for Cognito Hosted UI domain (e.g., hospital-mini-<random>)
+  DashboardBucketName:
+    Type: String
+    Description: Globally-unique S3 bucket name for admin dashboard (e.g., hospital-mini-dashboard-<random>)
 
 Globals:
   Function:
     Runtime: python3.11
     Timeout: 10
     MemorySize: 256
-    Architectures: [x86_64]
+    Tracing: Active
     Environment:
       Variables:
-        TABLE_NAME: !Ref PatientTable
+        APP_ENV: prod
+        TABLE_NAME: !Ref PatientRecordsTable
 
 Resources:
-  #####################################################
-  # Cognito
-  #####################################################
+  # ------------------ Cognito ------------------
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
-      UserPoolName: !Sub '${AWS::StackName}-pool'
-      UsernameAttributes: [email]
-      AutoVerifiedAttributes: [email]
-      AdminCreateUserConfig:
-        AllowAdminCreateUserOnly: true
+      UserPoolName: hospital-mini-user-pool
+      AutoVerifiedAttributes: [ email ]
+      UsernameAttributes: [ email ]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
 
-  UserPoolWebClient:
+  UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      ClientName: web
+      ClientName: hospital-mini-app-client
       UserPoolId: !Ref UserPool
       GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+      PreventUserExistenceErrors: ENABLED
+      SupportedIdentityProviders: [ COGNITO ]
       AllowedOAuthFlowsUserPoolClient: true
-      AllowedOAuthFlows: [code]
-      AllowedOAuthScopes: [openid, email, profile]
-      SupportedIdentityProviders: [COGNITO]
+      AllowedOAuthFlows: [ implicit ]
+      AllowedOAuthScopes: [ openid, email, profile ]
       CallbackURLs:
-        - !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/admin'
+        - !Sub "http://${DashboardBucketName}.s3-website.${AWS::Region}.amazonaws.com/"
       LogoutURLs:
-        - !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/admin'
+        - !Sub "http://${DashboardBucketName}.s3-website.${AWS::Region}.amazonaws.com/"
 
-  CognitoDomain:
+  UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
-      Domain: !Sub '${AWS::StackName}-${AWS::AccountId}'
+      Domain: !Ref CognitoDomainPrefix
       UserPoolId: !Ref UserPool
 
-  #####################################################
-  # DynamoDB
-  #####################################################
-  PatientTable:
+  GroupPatients:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: patients
+      UserPoolId: !Ref UserPool
+      Precedence: 10
+
+  GroupAdmin:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: admin
+      UserPoolId: !Ref UserPool
+      Precedence: 1
+
+  # ------------------ DynamoDB ------------------
+  PatientRecordsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub '${AWS::StackName}-patients'
+      TableName: !Sub "PatientRecords-${AWS::StackName}"
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
-        - AttributeName: patient_id
+        - AttributeName: patientId
           AttributeType: S
       KeySchema:
-        - AttributeName: patient_id
+        - AttributeName: patientId
           KeyType: HASH
 
-  #####################################################
-  # HTTP API (JWT authorizer by default)
-  #####################################################
+  # ------------------ HTTP API + JWT Authorizer ------------------
   HttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
-      StageName: '$default'
       CorsConfiguration:
-        AllowOrigins: ['*']
-        AllowHeaders: ['Authorization','Content-Type']
-        AllowMethods: ['GET','OPTIONS']
+        AllowMethods: [ GET ]
+        AllowOrigins:
+          - !Sub "http://${DashboardBucketName}.s3-website.${AWS::Region}.amazonaws.com"
+          - "*"
+        AllowHeaders: [ Authorization, Content-Type ]
       Auth:
         Authorizers:
           CognitoAuthorizer:
-            IdentitySource: '$request.header.Authorization'
             JwtConfiguration:
+              issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
               audience:
-                - !Ref UserPoolWebClient
-              issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
-        DefaultAuthorizer: CognitoAuthorizer
+                - !Ref UserPoolClient
+            IdentitySource: "$request.header.Authorization"
+        DefaultAuthorizer: NONE
 
-  #####################################################
-  # Lambda: health (public)
-  #####################################################
+  # ------------------ Lambdas ------------------
   HealthFunction:
     Type: AWS::Serverless::Function
-    Metadata:
-      BuildMethod: makefile
     Properties:
-      CodeUri: src/handlers
-      Handler: health.handler
+      Handler: health.lambda_handler
+      CodeUri: src/
+      Description: Public health check
+      Policies:
+        - AWSLambdaBasicExecutionRole
       Events:
-        HealthRoute:
+        GetHealth:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /health
             Method: GET
-            Auth:
-              Authorizer: NONE
 
-  #####################################################
-  # Lambda: dashboard (HTML + config.js, публічні)
-  #####################################################
-  DashboardFunction:
+  PatientMeFunction:
     Type: AWS::Serverless::Function
-    Metadata:
-      BuildMethod: makefile
     Properties:
-      CodeUri: src/handlers
-      Handler: dashboard.handler
-      Environment:
-        Variables:
-          TABLE_NAME: !Ref PatientTable
-          USER_POOL_ID: !Ref UserPool
-          USER_POOL_CLIENT_ID: !Ref UserPoolWebClient
-          API_BASE: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
-          COGNITO_DOMAIN: !Sub 'https://${CognitoDomain}.auth.${AWS::Region}.amazoncognito.com'
+      Handler: patient_me.lambda_handler
+      CodeUri: src/
+      Description: Returns current patient's record from DynamoDB
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PatientRecordsTable
       Events:
-        AdminHtml:
+        GetMe:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /admin
+            Path: /patient/me
             Method: GET
             Auth:
-              Authorizer: NONE
-        AdminConfig:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /admin/config.js
-            Method: GET
-            Auth:
-              Authorizer: NONE
+              Authorizer: CognitoAuthorizer
 
-  #####################################################
-  # Lambda: admin metrics (JWT, тільки для групи "admin")
-  #####################################################
   AdminMetricsFunction:
     Type: AWS::Serverless::Function
-    Metadata:
-      BuildMethod: makefile
     Properties:
-      CodeUri: src/handlers
-      Handler: admin_metrics.handler
+      Handler: admin_metrics.lambda_handler
+      CodeUri: src/
+      Description: Returns aggregated admin metrics from DynamoDB
       Policies:
+        - AWSLambdaBasicExecutionRole
         - DynamoDBReadPolicy:
-            TableName: !Ref PatientTable
+            TableName: !Ref PatientRecordsTable
       Events:
-        AdminMetrics:
+        GetMetrics:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
@@ -160,42 +171,46 @@ Resources:
             Auth:
               Authorizer: CognitoAuthorizer
 
-  #####################################################
-  # Lambda: me record (JWT, будь-який залогінений користувач)
-  #####################################################
-  MeRecordFunction:
-    Type: AWS::Serverless::Function
-    Metadata:
-      BuildMethod: makefile
+  # ------------------ S3 Dashboard ------------------
+  DashboardBucket:
+    Type: AWS::S3::Bucket
     Properties:
-      CodeUri: src/handlers
-      Handler: me_record.handler
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref PatientTable
-      Events:
-        MeRecord:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /me/record
-            Method: GET
-            Auth:
-              Authorizer: CognitoAuthorizer
+      BucketName: !Ref DashboardBucketName
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  DashboardBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DashboardBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action: "s3:GetObject"
+            Resource: !Sub "arn:aws:s3:::${DashboardBucketName}/*"
 
 Outputs:
-  HttpApiUrl:
-    Description: Base URL for the HTTP API
-    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+  ApiEndpoint:
+    Description: HTTP API endpoint
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
   UserPoolId:
     Description: Cognito User Pool Id
     Value: !Ref UserPool
   UserPoolClientId:
-    Description: Cognito User Pool Web Client Id
-    Value: !Ref UserPoolWebClient
-  CognitoDomain:
-    Description: Hosted UI domain
-    Value: !Sub 'https://${CognitoDomain}.auth.${AWS::Region}.amazoncognito.com'
-  PatientTableName:
-    Description: DynamoDB table name
-    Value: !Ref PatientTable
+    Description: Cognito App Client Id
+    Value: !Ref UserPoolClient
+  CognitoIssuer:
+    Description: JWT issuer URL for the authorizer
+    Value: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+  DashboardURL:
+    Description: S3 static website URL for the admin dashboard
+    Value: !Sub "http://${DashboardBucketName}.s3-website.${AWS::Region}.amazonaws.com/"
