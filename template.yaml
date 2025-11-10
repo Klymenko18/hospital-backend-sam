@@ -62,7 +62,7 @@ Resources:
           KeyType: HASH
 
   #####################################################
-  # HTTP API + Authorizer
+  # HTTP API (JWT authorizer by default)
   #####################################################
   HttpApi:
     Type: AWS::Serverless::HttpApi
@@ -80,17 +80,18 @@ Resources:
               audience:
                 - !Ref UserPoolWebClient
               issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
-        # DefaultAuthorizer — НЕ ставимо (інакше помилка валідації)
+        DefaultAuthorizer: CognitoAuthorizer
 
   #####################################################
   # Lambda: health (public)
   #####################################################
   HealthFunction:
     Type: AWS::Serverless::Function
-    Metadata: { BuildMethod: makefile }
+    Metadata:
+      BuildMethod: makefile
     Properties:
-      CodeUri: src
-      Handler: handlers/health.handler
+      CodeUri: src/handlers
+      Handler: health.handler
       Events:
         HealthRoute:
           Type: HttpApi
@@ -102,14 +103,22 @@ Resources:
               Authorizer: NONE
 
   #####################################################
-  # Lambda: dashboard (HTML + config.js)
+  # Lambda: dashboard (HTML + config.js, публічні)
   #####################################################
   DashboardFunction:
     Type: AWS::Serverless::Function
-    Metadata: { BuildMethod: makefile }
+    Metadata:
+      BuildMethod: makefile
     Properties:
-      CodeUri: src
-      Handler: handlers/dashboard.handler
+      CodeUri: src/handlers
+      Handler: dashboard.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref PatientTable
+          USER_POOL_ID: !Ref UserPool
+          USER_POOL_CLIENT_ID: !Ref UserPoolWebClient
+          API_BASE: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+          COGNITO_DOMAIN: !Sub 'https://${CognitoDomain}.auth.${AWS::Region}.amazoncognito.com'
       Events:
         AdminHtml:
           Type: HttpApi
@@ -127,23 +136,17 @@ Resources:
             Method: GET
             Auth:
               Authorizer: NONE
-      Environment:
-        Variables:
-          TABLE_NAME: !Ref PatientTable
-          USER_POOL_ID: !Ref UserPool
-          USER_POOL_CLIENT_ID: !Ref UserPoolWebClient
-          API_BASE: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
-          COGNITO_DOMAIN: !Sub 'https://${CognitoDomain}.auth.${AWS::Region}.amazoncognito.com'
 
   #####################################################
-  # Lambda: admin metrics (protected by Cognito group "admin")
+  # Lambda: admin metrics (JWT, тільки для групи "admin")
   #####################################################
   AdminMetricsFunction:
     Type: AWS::Serverless::Function
-    Metadata: { BuildMethod: makefile }
+    Metadata:
+      BuildMethod: makefile
     Properties:
-      CodeUri: src
-      Handler: handlers/admin_metrics.handler
+      CodeUri: src/handlers
+      Handler: admin_metrics.handler
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref PatientTable
@@ -158,14 +161,15 @@ Resources:
               Authorizer: CognitoAuthorizer
 
   #####################################################
-  # Lambda: me record (authenticated user)
+  # Lambda: me record (JWT, будь-який залогінений користувач)
   #####################################################
   MeRecordFunction:
     Type: AWS::Serverless::Function
-    Metadata: { BuildMethod: makefile }
+    Metadata:
+      BuildMethod: makefile
     Properties:
-      CodeUri: src
-      Handler: handlers/me_record.handler
+      CodeUri: src/handlers
+      Handler: me_record.handler
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref PatientTable
