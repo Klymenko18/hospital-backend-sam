@@ -80,7 +80,7 @@ Resources:
               audience:
                 - !Ref UserPoolWebClient
               issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
-        DefaultAuthorizer: None
+        # DefaultAuthorizer — НЕ ставимо (інакше помилка валідації)
 
   #####################################################
   # Lambda: health (public)
@@ -89,8 +89,8 @@ Resources:
     Type: AWS::Serverless::Function
     Metadata: { BuildMethod: makefile }
     Properties:
-      CodeUri: src/handlers
-      Handler: health.handler
+      CodeUri: src
+      Handler: handlers/health.handler
       Events:
         HealthRoute:
           Type: HttpApi
@@ -108,8 +108,8 @@ Resources:
     Type: AWS::Serverless::Function
     Metadata: { BuildMethod: makefile }
     Properties:
-      CodeUri: src/handlers
-      Handler: dashboard.handler
+      CodeUri: src
+      Handler: handlers/dashboard.handler
       Events:
         AdminHtml:
           Type: HttpApi
@@ -142,8 +142,8 @@ Resources:
     Type: AWS::Serverless::Function
     Metadata: { BuildMethod: makefile }
     Properties:
-      CodeUri: src/handlers
-      Handler: admin_metrics.handler
+      CodeUri: src
+      Handler: handlers/admin_metrics.handler
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref PatientTable
@@ -164,8 +164,8 @@ Resources:
     Type: AWS::Serverless::Function
     Metadata: { BuildMethod: makefile }
     Properties:
-      CodeUri: src/handlers
-      Handler: me_record.handler
+      CodeUri: src
+      Handler: handlers/me_record.handler
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref PatientTable
