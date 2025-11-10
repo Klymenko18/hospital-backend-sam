@@ -1,0 +1,11 @@
+{
+  "requestContext": {
+    "authorizer": {
+      "jwt": {
+        "claims": {
+          "sub": "REPLACE_PATIENT_SUB"
+        }
+      }
+    }
+  }
+}

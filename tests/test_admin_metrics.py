@@ -1,71 +1,47 @@
 from __future__ import annotations
 
-import json
-from typing import Any, Dict
-import handlers.admin_overview as overview
-import handlers.admin_diseases as diseases
-import handlers.admin_medications as meds
+from typing import Any, Dict, List
+
+import importlib
+
+admin_metrics = importlib.import_module("src.handlers.admin_metrics")
 
 
-def admin_event(qs: Dict[str, str] | None = None):
-    return {
-        "requestContext": {"authorizer": {"jwt": {"claims": {"cognito:groups": "Admin"}}}},
-        "queryStringParameters": qs,
-    }
+class _FakeTable:
+    def __init__(self, items: List[Dict[str, Any]]):
+        self._items = items
+
+    def scan(self) -> Dict[str, Any]:
+        return {"Items": self._items}
 
 
-def patients_fixture():
-    return [
-        {
-            "patient_id": "1",
-            "name": "A",
-            "sex": "M",
-            "date_of_birth": "1980-01-01",
-            "bmi": 25.0,
-            "medications": ["atorvastatin 20 mg"],
-            "diseases": ["hypertension"],
-        },
-        {
-            "patient_id": "2",
-            "name": "B",
-            "sex": "F",
-            "date_of_birth": "1990-01-01",
-            "bmi": 27.0,
-            "medications": ["metformin 500 mg"],
-            "diseases": ["type 2 diabetes", "hypertension"],
-        },
+def _event_groups(groups) -> Dict[str, Any]:
+    return {"requestContext": {"authorizer": {"jwt": {"claims": {"cognito:groups": groups}}}}}
+
+
+def res_body(res: Dict[str, Any]) -> Dict[str, Any]:
+    import json
+
+    return json.loads(res["body"])
+
+
+def test_admin_metrics_ok(monkeypatch):
+    items = [
+        {"patient_id": "a", "diagnoses": ["A", "B", "A"]},
+        {"patient_id": "b", "diagnoses": ["A"]},
     ]
-
-
-def test_overview(monkeypatch):
-    monkeypatch.setattr(overview, "scan_patients", lambda: patients_fixture())
-    resp = overview.lambda_handler(admin_event(), None)
-    assert resp["statusCode"] == 200
-    body = json.loads(resp["body"])
+    monkeypatch.setattr(admin_metrics, "_table", _FakeTable(items))
+    event = _event_groups(["admin"])
+    res = admin_metrics.handler(event, context=None)
+    assert res["statusCode"] == 200
+    body = res_body(res)
     assert body["total_patients"] == 2
-    assert "avg_bmi" in body
-    assert "counts_by_sex" in body
-    assert "top_diseases" in body
+    assert body["top_diagnoses"][0]["diagnosis"] == "A"
+    assert body["top_diagnoses"][0]["count"] == 3
 
 
-def test_diseases_hist(monkeypatch):
-    monkeypatch.setattr(diseases, "scan_patients", lambda: patients_fixture())
-    resp = diseases.lambda_handler(admin_event(), None)
-    assert resp["statusCode"] == 200
-    body = json.loads(resp["body"])
-    assert body["diseases"]["hypertension"] == 2
-
-
-def test_meds_hist(monkeypatch):
-    monkeypatch.setattr(meds, "scan_patients", lambda: patients_fixture())
-    resp = meds.lambda_handler(admin_event(), None)
-    assert resp["statusCode"] == 200
-    body = json.loads(resp["body"])
-    assert sum(body["medications"].values()) == 2
-
-
-def test_admin_forbidden_when_not_in_group(monkeypatch):
-    monkeypatch.setattr(overview, "scan_patients", lambda: [])
-    event = {"requestContext": {"authorizer": {"jwt": {"claims": {"cognito:groups": "Patients"}}}}}
-    resp = overview.lambda_handler(event, None)
-    assert resp["statusCode"] == 403
+def test_admin_metrics_forbidden(monkeypatch):
+    monkeypatch.setattr(admin_metrics, "_table", _FakeTable([]))
+    event = _event_groups(["patients"])
+    res = admin_metrics.handler(event, context=None)
+    assert res["statusCode"] == 403

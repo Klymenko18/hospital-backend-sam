@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Dict
-from lib.utils import json_response
+
+from common.utils import json_response, now_utc_iso
 
 
-def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """
-    Liveness endpoint.
-    """
-    return json_response(200, {"status": "ok"})
+def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """Return a public health check payload."""
+    payload = {
+        "status": "ok",
+        "service": "hospital-mini-backend",
+        "region": os.environ.get("AWS_REGION", "unknown"),
+        "time_utc": now_utc_iso(),
+    }
+    return json_response(200, payload)
