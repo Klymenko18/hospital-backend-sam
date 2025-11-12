@@ -105,6 +105,7 @@ Resources:
           - "*"
         AllowHeaders: [ Authorization, Content-Type ]
       Auth:
+        DefaultAuthorizer: CognitoAuthorizer
         Authorizers:
           CognitoAuthorizer:
             JwtConfiguration:
@@ -112,7 +113,6 @@ Resources:
               audience:
                 - !Ref UserPoolClient
             IdentitySource: "$request.header.Authorization"
-        DefaultAuthorizer: NONE
 
   # ------------------ Lambdas ------------------
   HealthFunction:
@@ -130,6 +130,8 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /health
             Method: GET
+            Auth:
+              Authorizer: NONE     # публічний маршрут
 
   PatientMeFunction:
     Type: AWS::Serverless::Function
@@ -137,6 +139,9 @@ Resources:
       Handler: patient_me.lambda_handler
       CodeUri: src/
       Description: Returns current patient's record from DynamoDB
+      Environment:
+        Variables:
+          PK_NAME: patientId      # важливо для пошуку по email
       Policies:
         - AWSLambdaBasicExecutionRole
         - DynamoDBCrudPolicy:
