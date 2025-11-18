@@ -1,0 +1,50 @@
+{
+    "FunctionName": "hospital-mini-stack-AdminMetricsFunction-5rXvUmB6wlEk",
+    "FunctionArn": "arn:aws:lambda:eu-central-1:666709165814:function:hospital-mini-stack-AdminMetricsFunction-5rXvUmB6wlEk",
+    "Runtime": "python3.11",
+    "Role": "arn:aws:iam::666709165814:role/hospital-mini-stack-AdminMetricsFunctionRole-75uoObHS185h",
+    "Handler": "src.handlers.admin_metrics.lambda_handler",
+    "CodeSize": 21352301,
+    "Description": "Returns aggregated admin metrics from DynamoDB",
+    "Timeout": 10,
+    "MemorySize": 256,
+    "LastModified": "2025-11-12T05:30:45.000+0000",
+    "CodeSha256": "0qcf+mTDChwiOZ9n7JhaHkw30wtXGN2qIEqWvgRzQsQ=",
+    "Version": "$LATEST",
+    "Environment": {
+        "Variables": {
+            "ADMIN_GROUPS": "GroupAdmin",
+            "ADMIN_GROUP_NAME": "GroupAdmin",
+            "ADMIN_ALLOWED_GROUP": "GroupAdmin",
+            "REQUIRE_ADMIN_GROUP": "true",
+            "ADMIN_ALLOWED_GROUPS": "GroupAdmin",
+            "ADMIN_GROUP": "GroupAdmin"
+        }
+    },
+    "TracingConfig": {
+        "Mode": "Active"
+    },
+    "RevisionId": "8dd9256f-4c3d-4efd-97f6-582213716fdc",
+    "State": "Active",
+    "LastUpdateStatus": "InProgress",
+    "LastUpdateStatusReason": "The function is being created.",
+    "LastUpdateStatusReasonCode": "Creating",
+    "PackageType": "Zip",
+    "Architectures": [
+        "x86_64"
+    ],
+    "EphemeralStorage": {
+        "Size": 512
+    },
+    "SnapStart": {
+        "ApplyOn": "None",
+        "OptimizationStatus": "Off"
+    },
+    "RuntimeVersionConfig": {
+        "RuntimeVersionArn": "arn:aws:lambda:eu-central-1::runtime:8ffbe4fa8da2edc85690a225a5a6241ec6325c93147eb87a2a04bf62cf3637a9"
+    },
+    "LoggingConfig": {
+        "LogFormat": "Text",
+        "LogGroup": "/aws/lambda/hospital-mini-stack-AdminMetricsFunction-5rXvUmB6wlEk"
+    }
+}

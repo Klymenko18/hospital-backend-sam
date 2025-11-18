@@ -1,0 +1,15 @@
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-select = ["I", "D", "UP", "B"]
+per-file-ignores = { "scripts/*.py" = ["T201"] }
+
+[tool.ruff.pydocstyle]
+convention = "google"
+
+[tool.ruff.isort]
+known-first-party = ["handlers", "lib"]

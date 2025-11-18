@@ -1,0 +1,29 @@
+flowchart LR
+  subgraph Web[Admin Dashboard (S3 Static Website)]
+    UI[HTML+JS+Chart.js]
+  end
+
+  UI -->|Authorization: Bearer JWT| API[(Amazon API Gateway HTTP API)]
+
+  subgraph Auth[AWS Cognito]
+    UP[User Pool]
+    Client[User Pool Client]
+    Groups[Groups: Patients, Admin]
+  end
+
+  API <-->|JWT Authorizer| Auth
+
+  API -->|/health, /patient/me, /admin/*| L1[Lambda: health]
+  API --> L2[Lambda: patient_me]
+  API --> L3[Lambda: admin_overview]
+  API --> L4[Lambda: admin_diseases]
+  API --> L5[Lambda: admin_medications]
+
+  subgraph DB[Amazon DynamoDB]
+    T[(PatientRecords)]
+  end
+
+  L2 -->|GetItem| T
+  L3 -->|Scan| T
+  L4 -->|Scan| T
+  L5 -->|Scan| T

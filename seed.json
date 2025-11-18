@@ -1,0 +1,18 @@
+{
+  "PatientRecords-hospital-mini-stack-OK": [
+    { "PutRequest": { "Item": {
+      "patientId": {"S":"patient1@example.com"},
+      "full_name":{"S":"John Doe"},
+      "dob":{"S":"1998-05-10"},
+      "policy_no":{"S":"PL-100001"},
+      "notes":{"S":"No allergies."}
+    }}},
+    { "PutRequest": { "Item": {
+      "patientId": {"S":"patient2@example.com"},
+      "full_name":{"S":"Jane Smith"},
+      "dob":{"S":"2000-11-22"},
+      "policy_no":{"S":"PL-100002"},
+      "notes":{"S":"Lactose intolerance."}
+    }}}
+  ]
+}

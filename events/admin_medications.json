@@ -1,0 +1,11 @@
+{
+  "requestContext": {
+    "authorizer": {
+      "jwt": {
+        "claims": {
+          "cognito:groups": "Admin"
+        }
+      }
+    }
+  }
+}

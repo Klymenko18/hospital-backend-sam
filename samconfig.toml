@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "hospital-mini-stack"
+resolve_s3 = true
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "ProjectName=\"hospital-backend-sam\" EnvironmentName=\"dev\" DashboardBucketName=\"hospital-mini-dashboard-dev-max-20251118\" DashboardOrigin=\"http://localhost:8000\" ExistingUserPoolId=\"\" ExistingUserPoolClientId=\"\" PatientTableName=\"PatientRecords-hospital-mini-stack\""
+s3_prefix = "hospital-mini-stack"
+image_repositories = []
+
+[default.global.parameters]
+region = "eu-central-1"

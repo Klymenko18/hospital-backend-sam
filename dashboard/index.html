@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Hospital Admin Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 2rem; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+    button, a.btn { padding: 10px 16px; border-radius: 10px; border: 1px solid #ccc; background: #f9f9f9; cursor: pointer; text-decoration: none; display: inline-block; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+  </style>
+</head>
+<body>
+  <h1>Hospital Admin Dashboard</h1>
+
+  <div class="card">
+    <p id="status">Not authenticated.</p>
+    <div id="auth-actions"></div>
+  </div>
+
+  <div class="card">
+    <h2>Metrics</h2>
+    <button id="load">Load metrics</button>
+    <pre id="out"></pre>
+  </div>
+
+  <script>
+    // Fill these at deploy time using stack outputs
+    const API_BASE = "__API_BASE__";            // e.g., https://abc.execute-api.eu-central-1.amazonaws.com
+    const USER_POOL_DOMAIN = "__COGNITO_DOMAIN__"; // e.g., https://hospital-mini-xyz.auth.eu-central-1.amazoncognito.com
+    const CLIENT_ID = "__CLIENT_ID__";
+    const REDIRECT = window.location.origin + window.location.pathname;
+
+    function parseHash() {
+      const h = window.location.hash.replace(/^#/, "");
+      const params = new URLSearchParams(h);
+      return {
+        id_token: params.get("id_token"),
+        access_token: params.get("access_token"),
+        expires_in: params.get("expires_in"),
+        token_type: params.get("token_type"),
+      };
+    }
+
+    function loginUrl() {
+      const url = new URL(USER_POOL_DOMAIN + "/oauth2/authorize");
+      url.searchParams.set("response_type", "token");
+      url.searchParams.set("client_id", CLIENT_ID);
+      url.searchParams.set("redirect_uri", REDIRECT);
+      url.searchParams.set("scope", "openid email profile");
+      return url.toString();
+    }
+
+    function logoutUrl() {
+      const url = new URL(USER_POOL_DOMAIN + "/logout");
+      url.searchParams.set("client_id", CLIENT_ID);
+      url.searchParams.set("logout_uri", REDIRECT);
+      return url.toString();
+    }
+
+    const tokens = parseHash();
+    if (tokens.id_token) {
+      sessionStorage.setItem("id_token", tokens.id_token);
+      history.replaceState({}, "", REDIRECT);
+    }
+    const token = sessionStorage.getItem("id_token");
+
+    const status = document.getElementById("status");
+    const actions = document.getElementById("auth-actions");
+    if (token) {
+      status.textContent = "Authenticated.";
+      actions.innerHTML = `<a class="btn" href="${logoutUrl()}">Logout</a>`;
+    } else {
+      status.textContent = "Not authenticated.";
+      actions.innerHTML = `<a class="btn" href="${loginUrl()}">Login with Cognito</a>`;
+    }
+
+    document.getElementById("load").addEventListener("click", async () => {
+      const out = document.getElementById("out");
+      out.textContent = "Loading...";
+      const t = sessionStorage.getItem("id_token");
+      if (!t) {
+        out.textContent = "No id_token, please login.";
+        return;
+      }
+      try {
+        const res = await fetch(API_BASE + "/admin/metrics", {
+          headers: { Authorization: "Bearer " + t }
+        });
+        const json = await res.json();
+        out.textContent = JSON.stringify(json, null, 2);
+      } catch (e) {
+        out.textContent = String(e);
+      }
+    });
+  </script>
+</body>
+</html>

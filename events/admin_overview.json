@@ -1,0 +1,15 @@
+{
+  "requestContext": {
+    "authorizer": {
+      "jwt": {
+        "claims": {
+          "cognito:groups": "Admin"
+        }
+      }
+    }
+  },
+  "queryStringParameters": {
+    "min_age": "18",
+    "max_age": "65"
+  }
+}

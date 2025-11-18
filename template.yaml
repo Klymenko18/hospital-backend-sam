@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Hospital mini backend (SAM)
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: hospital-backend-sam
+  EnvironmentName:
+    Type: String
+    Default: dev
+  DashboardBucketName:
+    Type: String
+    Default: ""
+  DashboardOrigin:
+    Type: String
+    Default: http://localhost:8000
+  ExistingUserPoolId:
+    Type: String
+    Default: ""
+  ExistingUserPoolClientId:
+    Type: String
+    Default: ""
+  PatientTableName:
+    Type: String
+    Default: PatientRecords-hospital-mini-stack
+
+Globals:
+  Function:
+    Runtime: python3.9
+    Architectures:
+      - x86_64
+    Timeout: 10
+    MemorySize: 256
+    CodeUri: src/
+    Environment:
+      Variables:
+        PATIENT_TABLE_NAME: !Ref PatientTableName
+        ADMIN_GROUPS: GroupAdmin
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref DashboardOrigin
+        AllowMethods:
+          - GET
+          - OPTIONS
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            JwtConfiguration:
+              issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+              audience:
+                - !Ref UserPoolClient
+            IdentitySource: "$request.header.Authorization"
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${ProjectName}-${EnvironmentName}-user-pool"
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Sub "${ProjectName}-${EnvironmentName}-app-client"
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+      CallbackURLs:
+        - !Ref DashboardOrigin
+      LogoutURLs:
+        - !Ref DashboardOrigin
+
+  GroupAdmin:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: GroupAdmin
+      UserPoolId: !Ref UserPool
+
+  GroupPatients:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: GroupPatients
+      UserPoolId: !Ref UserPool
+
+  PatientRecordsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref PatientTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: patientId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: patientId
+          KeyType: HASH
+
+  HealthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers.health.lambda_handler
+      Events:
+        GetHealth:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /health
+            Method: GET
+            Auth:
+              Authorizer: NONE
+
+  PatientMeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers.patient_me.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PatientRecordsTable
+      Events:
+        GetMe:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /patient/me
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+
+  AdminMetricsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers.admin_metrics.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PatientRecordsTable
+      Events:
+        GetMetrics:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /admin/metrics
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+
+Outputs:
+  ApiEndpoint:
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  ApiId:
+    Value: !Ref HttpApi
+  PatientTableNameOut:
+    Value: !Ref PatientRecordsTable
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
