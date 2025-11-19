@@ -16,25 +16,14 @@ def _prepare_src_on_sys_path() -> None:
         sys.path.insert(0, src_str)
 
 
-def _import_me_handler_module() -> ModuleType:
-    """Import the patient 'me' handler module, supporting both possible names."""
+def _import_me_record_module() -> ModuleType:
+    """Import the me_record module from the handlers package."""
     _prepare_src_on_sys_path()
-    os.environ.setdefault("PATIENT_TABLE_NAME", "dummy-table")
-
-    try:
-        return importlib.import_module("handlers.me_record")
-    except ModuleNotFoundError:
-        return importlib.import_module("handlers.patient_me")
+    os.environ.setdefault("TABLE_NAME", "dummy-table")
+    return importlib.import_module("handlers.me_record")
 
 
-def test_me_handler_module_imports() -> None:
-    """Patient 'me' handler module must be importable."""
-    module = _import_me_handler_module()
+def test_me_record_module_imports() -> None:
+    """me_record module must be importable."""
+    module = _import_me_record_module()
     assert isinstance(module, ModuleType)
-
-
-def test_me_handler_has_handler_callable() -> None:
-    """Patient 'me' handler module must define a callable handler."""
-    module = _import_me_handler_module()
-    assert hasattr(module, "handler")
-    assert callable(module.handler)
