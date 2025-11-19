@@ -16,21 +16,25 @@ def _prepare_src_on_sys_path() -> None:
         sys.path.insert(0, src_str)
 
 
-def _import_patient_me_module() -> ModuleType:
-    """Import the patient_me module from the handlers package."""
+def _import_handlers():
+    """Import patient and admin handler modules."""
     _prepare_src_on_sys_path()
     os.environ.setdefault("TABLE_NAME", "dummy-table")
-    return importlib.import_module("handlers.patient_me")
+    os.environ.setdefault("AWS_DEFAULT_REGION", "eu-central-1")
+    os.environ.setdefault("AWS_REGION", "eu-central-1")
+    patient = importlib.import_module("handlers.patient_me")
+    admin = importlib.import_module("handlers.admin_metrics")
+    return patient, admin
 
 
 def test_patient_me_module_imports() -> None:
-    """patient_me module must be importable."""
-    module = _import_patient_me_module()
-    assert isinstance(module, ModuleType)
+    """Patient handler module must be importable."""
+    patient, _ = _import_handlers()
+    assert isinstance(patient, ModuleType)
 
 
 def test_patient_me_has_lambda_handler() -> None:
-    """patient_me module must expose a callable lambda_handler."""
-    module = _import_patient_me_module()
-    assert hasattr(module, "lambda_handler")
-    assert callable(getattr(module, "lambda_handler"))
+    """Patient handler module must expose a callable lambda_handler."""
+    patient, _ = _import_handlers()
+    assert hasattr(patient, "lambda_handler")
+    assert callable(getattr(patient, "lambda_handler"))

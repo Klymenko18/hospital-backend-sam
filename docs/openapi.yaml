@@ -1,0 +1,190 @@
+openapi: 3.0.3
+info:
+    title: Hospital Mini Backend API
+    version: 1.0.0
+    description: >
+        Minimal Cognito-protected hospital backend built on AWS SAM.
+        Includes a public healthcheck, patient self-view, and admin metrics.
+
+servers:
+    - url: https://{apiId}.execute-api.{region}.amazonaws.com
+      description: Deployed API Gateway HTTP API
+      variables:
+          apiId:
+              default: your-api-id
+              description: API Gateway HTTP API ID
+          region:
+              default: eu-central-1
+              description: AWS region of the API
+
+tags:
+    - name: Health
+      description: Basic healthcheck endpoints
+    - name: Patient
+      description: Endpoints for authenticated patients
+    - name: Admin
+      description: Endpoints for admin users with GroupAdmin membership
+
+paths:
+    /health:
+        get:
+            tags: [Health]
+            summary: Healthcheck
+            description: |
+                Public healthcheck endpoint. Does not require authentication.
+            responses:
+                "200":
+                    description: Service is healthy
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/HealthResponse"
+                            examples:
+                                ok:
+                                    summary: Healthy response
+                                    value:
+                                        status: ok
+
+    /patient/me:
+        get:
+            tags: [Patient]
+            summary: Get current patient profile
+            description: >
+                Returns the patient record that corresponds to the current
+                authenticated Cognito user. Requires a valid JWT IdToken
+                in the `Authorization: Bearer <token>` header.
+            security:
+                - bearerAuth: []
+            responses:
+                "200":
+                    description: Patient record found
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/Patient"
+                            examples:
+                                example:
+                                    summary: Example patient
+                                    value:
+                                        patientId: patient1@example.com
+                                        name: John Doe
+                                        status: active
+                                        age: 30
+                                        bmi: 24.1
+                                        diseases:
+                                            - hypertension
+                                            - diabetes
+                                        medications:
+                                            - drug-a
+                                            - drug-b
+                "401":
+                    description: Missing or invalid token
+                "404":
+                    description: Patient record not found
+
+    /admin/metrics:
+        get:
+            tags: [Admin]
+            summary: Get aggregated patient metrics
+            description: >
+                Returns aggregated statistics over all patient records.
+                Requires an authenticated Cognito user that belongs to the
+                `GroupAdmin` group.
+
+                The exact shape of the metrics object is implementation-specific
+                but typically includes counts and basic statistics.
+            security:
+                - bearerAuth: []
+            responses:
+                "200":
+                    description: Aggregated metrics
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/AdminMetrics"
+                            examples:
+                                example:
+                                    summary: Example metrics
+                                    value:
+                                        totalPatients: 42
+                                        activePatients: 30
+                                        inactivePatients: 12
+                                        averageAge: 38.5
+                "401":
+                    description: Missing or invalid token
+                "403":
+                    description: Caller is not an admin (not in GroupAdmin)
+
+components:
+    securitySchemes:
+        bearerAuth:
+            type: http
+            scheme: bearer
+            bearerFormat: JWT
+            description: >
+                Cognito IdToken or AccessToken in the Authorization header:
+                `Authorization: Bearer <token>`.
+
+    schemas:
+        HealthResponse:
+            type: object
+            properties:
+                status:
+                    type: string
+                    example: ok
+
+        Patient:
+            type: object
+            description: >
+                Patient record stored in DynamoDB and resolved from the
+                authenticated Cognito user.
+            properties:
+                patientId:
+                    type: string
+                    description: Patient identifier, typically an email
+                    example: patient1@example.com
+                name:
+                    type: string
+                    example: John Doe
+                status:
+                    type: string
+                    description: Application-specific status of the patient
+                    example: active
+                age:
+                    type: integer
+                    format: int32
+                    example: 30
+                bmi:
+                    type: number
+                    format: float
+                    example: 24.1
+                diseases:
+                    type: array
+                    items:
+                        type: string
+                    example:
+                        - hypertension
+                        - diabetes
+                medications:
+                    type: array
+                    items:
+                        type: string
+                    example:
+                        - drug-a
+                        - drug-b
+            required:
+                - patientId
+                - name
+                - status
+
+        AdminMetrics:
+            type: object
+            description: >
+                Aggregated metrics over all patients.
+                Keys and values are implementation-specific.
+            additionalProperties:
+                oneOf:
+                    - type: integer
+                    - type: number
+                    - type: string
+                    - type: boolean

@@ -1,6 +1,7 @@
 __pycache__/
 .pytest_cache/
 .aws-sam/
-.out/
 out/
 .env
+.venv/
+venv/

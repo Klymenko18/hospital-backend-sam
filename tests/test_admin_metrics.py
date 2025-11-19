@@ -20,6 +20,8 @@ def _import_admin_metrics() -> ModuleType:
     """Import the admin metrics module from the handlers package."""
     _prepare_src_on_sys_path()
     os.environ.setdefault("TABLE_NAME", "dummy-table")
+    os.environ.setdefault("AWS_DEFAULT_REGION", "eu-central-1")
+    os.environ.setdefault("AWS_REGION", "eu-central-1")
     return importlib.import_module("handlers.admin_metrics")
 
 
@@ -32,8 +34,5 @@ def test_admin_metrics_module_imports() -> None:
 def test_admin_metrics_has_callable_entrypoint() -> None:
     """Admin metrics module must have at least one callable symbol."""
     module = _import_admin_metrics()
-    names = [
-        name for name in dir(module)
-        if callable(getattr(module, name))
-    ]
+    names = [name for name in dir(module) if callable(getattr(module, name))]
     assert names

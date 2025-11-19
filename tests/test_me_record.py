@@ -20,6 +20,8 @@ def _import_me_record_module() -> ModuleType:
     """Import the me_record module from the handlers package."""
     _prepare_src_on_sys_path()
     os.environ.setdefault("TABLE_NAME", "dummy-table")
+    os.environ.setdefault("AWS_DEFAULT_REGION", "eu-central-1")
+    os.environ.setdefault("AWS_REGION", "eu-central-1")
     return importlib.import_module("handlers.me_record")
 
 
