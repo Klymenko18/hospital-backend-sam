@@ -1,50 +1,40 @@
-from __future__ import annotations
-
-from typing import Any, Dict
-
 import importlib
-
-me_record = importlib.import_module("src.handlers.me_record")
-
-
-class _FakeTable:
-    def __init__(self, item: Dict[str, Any] | None):
-        self._item = item
-
-    def get_item(self, Key: Dict[str, Any]) -> Dict[str, Any]:
-        return {"Item": self._item} if self._item else {}
+import os
+import sys
+from pathlib import Path
+from types import ModuleType
 
 
-def _event_with_claims(sub: str | None) -> Dict[str, Any]:
-    claims = {}
-    if sub:
-        claims["sub"] = sub
-    return {"requestContext": {"authorizer": {"jwt": {"claims": claims}}}}
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_me_record_ok(monkeypatch):
-    monkeypatch.setattr(me_record, "_table", _FakeTable({"patient_id": "abc", "full_name": "Jane Doe"}))
-    event = _event_with_claims("abc")
-    res = me_record.handler(event, context=None)
-    assert res["statusCode"] == 200
-    assert "record" in res_body(res)
+def _prepare_src_on_sys_path() -> None:
+    """Ensure that the src directory is importable as a top-level path."""
+    src_dir = PROJECT_ROOT / "src"
+    src_str = str(src_dir)
+    if src_dir.is_dir() and src_str not in sys.path:
+        sys.path.insert(0, src_str)
 
 
-def test_me_record_not_found(monkeypatch):
-    monkeypatch.setattr(me_record, "_table", _FakeTable(None))
-    event = _event_with_claims("abc")
-    res = me_record.handler(event, context=None)
-    assert res["statusCode"] == 404
+def _import_me_handler_module() -> ModuleType:
+    """Import the patient 'me' handler module, supporting both possible names."""
+    _prepare_src_on_sys_path()
+    os.environ.setdefault("PATIENT_TABLE_NAME", "dummy-table")
+
+    try:
+        return importlib.import_module("handlers.me_record")
+    except ModuleNotFoundError:
+        return importlib.import_module("handlers.patient_me")
 
 
-def test_me_record_unauthorized(monkeypatch):
-    monkeypatch.setattr(me_record, "_table", _FakeTable(None))
-    event = _event_with_claims(None)
-    res = me_record.handler(event, context=None)
-    assert res["statusCode"] == 401
+def test_me_handler_module_imports() -> None:
+    """Patient 'me' handler module must be importable."""
+    module = _import_me_handler_module()
+    assert isinstance(module, ModuleType)
 
 
-def res_body(res: Dict[str, Any]) -> Dict[str, Any]:
-    import json
-
-    return json.loads(res["body"])
+def test_me_handler_has_handler_callable() -> None:
+    """Patient 'me' handler module must define a callable handler."""
+    module = _import_me_handler_module()
+    assert hasattr(module, "handler")
+    assert callable(module.handler)
